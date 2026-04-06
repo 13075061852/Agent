@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Chat</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0a0f;--sidebar:#111118;--chat:#0d0d14;
+  --user-bubble:#2563eb;--ai-bubble:#1a1a24;
+  --accent:#6366f1;--accent2:#818cf8;
+  --text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;
+  --border:#1e1e2e;--input:#16161f;
+  --green:#22c55e;--red:#ef4444;--orange:#f59e0b;
+  --radius:12px;
+}
+html,body{height:100%;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+button{font-family:inherit}
+
+/* Layout */
+.app{display:flex;height:100vh}
+
+/* Sidebar */
+.sidebar{width:260px;background:var(--sidebar);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;transition:transform .3s}
+.sidebar-header{padding:20px 16px 12px;display:flex;align-items:center;justify-content:space-between}
+.sidebar-header h2{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px}
+.sidebar-header h2 span{font-size:18px}
+
+.config{padding:0 12px 12px;border-bottom:1px solid var(--border)}
+.config label{display:block;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin:10px 0 4px;font-weight:500}
+.config input,.config select{width:100%;padding:7px 10px;background:var(--input);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;outline:none;transition:border .2s}
+.config input:focus,.config select:focus{border-color:var(--accent)}
+.config input[type=password]{letter-spacing:2px;font-size:11px}
+
+/* Model Picker */
+.model-picker{position:relative}
+.model-trigger{width:100%;padding:8px 10px;background:var(--input);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:border .2s;text-align:left;font-family:inherit}
+.model-trigger:hover,.model-trigger.open{border-color:var(--accent)}
+.model-trigger-icon{width:16px;height:16px;flex-shrink:0}
+.model-trigger-text{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.model-trigger-arrow{color:var(--text3);font-size:10px;transition:transform .2s;flex-shrink:0}
+.model-trigger.open .model-trigger-arrow{transform:rotate(180deg)}
+.model-dropdown{display:none;position:absolute;left:0;right:0;top:calc(100% + 4px);background:#16161f;border:1px solid var(--border);border-radius:10px;z-index:200;box-shadow:0 12px 40px rgba(0,0,0,.5);max-height:340px;overflow:hidden;animation:dropIn .15s ease}
+.model-dropdown.show{display:flex;flex-direction:column}
+@keyframes dropIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.model-search-wrap{display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid var(--border)}
+.model-search-icon{font-size:12px;opacity:.5}
+.model-search{flex:1;background:none;border:none;color:var(--text);font-size:12px;outline:none;font-family:inherit}
+.model-search::placeholder{color:var(--text3)}
+.model-list{overflow-y:auto;padding:0 4px 4px;scrollbar-width:thin}
+.model-cat{padding:8px 8px 4px;font-size:9px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;position:sticky;top:0;margin:0;background:#16161f;z-index:1;display:flex;align-items:center;gap:6px}
+.model-opt{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:7px;cursor:pointer;font-size:12px;color:var(--text2);transition:all .12s}
+.model-opt:hover{background:rgba(255,255,255,.06);color:var(--text)}
+.model-opt.active{background:rgba(99,102,241,.15);color:var(--accent2)}
+.model-opt-icon{font-size:14px;flex-shrink:0;width:20px;text-align:center;display:flex;align-items:center;justify-content:center}
+.model-opt-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.model-opt-badge{font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(99,102,241,.12);color:var(--accent2);font-weight:500;flex-shrink:0}
+.model-opt.hidden{display:none}
+
+/* Quota Bar */
+.quota-bar{padding:10px 12px;border-bottom:1px solid var(--border)}
+.quota-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.quota-label{font-size:11px;color:var(--text2);font-weight:500}
+.quota-num{font-size:11px;font-weight:600;color:var(--green)}
+.quota-num.warn{color:var(--orange)}
+.quota-num.danger{color:var(--red)}
+.quota-track{height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.quota-fill{height:100%;border-radius:3px;transition:width .6s ease,background .3s;background:var(--green)}
+.quota-fill.warn{background:var(--orange)}
+.quota-fill.danger{background:var(--red)}
+.quota-footer{display:flex;align-items:center;justify-content:space-between;margin-top:5px;font-size:10px;color:var(--text3)}
+.quota-refresh{background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;padding:0 2px;border-radius:3px;transition:all .15s}
+.quota-refresh:hover{color:var(--accent2)}
+
+.actions{padding:10px 12px;display:flex;gap:6px}
+.actions button{flex:1;padding:8px;border:none;border-radius:8px;font-size:12px;cursor:pointer;font-weight:500;transition:all .15s}
+.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:var(--accent2)}
+.btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border)!important}.btn-ghost:hover{background:rgba(255,255,255,.05);color:var(--text)}
+
+.history{flex:1;overflow-y:auto;padding:8px}
+.history-item{padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text2);transition:all .15s;position:relative}
+.history-item:hover{background:rgba(255,255,255,.04);color:var(--text)}
+.history-item.active{background:rgba(99,102,241,.15);color:var(--accent2)}
+.history-item .del{position:absolute;right:6px;top:50%;transform:translateY(-50%);opacity:0;background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:2px 4px;border-radius:4px}
+.history-item:hover .del{opacity:1}
+.history-item .del:hover{color:var(--red);background:rgba(239,68,68,.1)}
+
+.sidebar-footer{padding:10px 12px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);text-align:center}
+
+/* Chat */
+.chat{flex:1;display:flex;flex-direction:column;min-width:0}
+.chat-header{padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--sidebar)}
+.chat-header-left{display:flex;align-items:center;gap:10px}
+.chat-header-left .title{font-size:14px;font-weight:600}
+.model-tag{font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(99,102,241,.15);color:var(--accent2);font-weight:500}
+.chat-header-right{display:flex;gap:4px}
+.chat-header-right button{background:none;border:none;color:var(--text3);cursor:pointer;padding:6px 8px;border-radius:6px;font-size:14px;transition:all .15s}
+.chat-header-right button:hover{background:rgba(255,255,255,.06);color:var(--text)}
+
+.messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px;scroll-behavior:smooth}
+
+/* Message */
+.msg{display:flex;gap:10px;max-width:85%;animation:fadeUp .25s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.msg.user{align-self:flex-end;flex-direction:row-reverse}
+.msg .avatar{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;font-weight:600}
+.msg.user .avatar{background:var(--user-bubble)}
+.msg.ai .avatar{background:linear-gradient(135deg,var(--accent),#a855f7)}
+.msg .content{display:flex;flex-direction:column;gap:4px}
+.msg .bubble{padding:10px 14px;border-radius:var(--radius);font-size:13.5px;line-height:1.65;word-break:break-word;position:relative}
+.msg.user .bubble{background:var(--user-bubble);border-bottom-right-radius:4px;color:#fff}
+.msg.ai .bubble{background:var(--ai-bubble);border:1px solid var(--border);border-bottom-left-radius:4px}
+.msg .meta{font-size:10px;color:var(--text3);padding:0 4px;display:flex;gap:8px;align-items:center}
+.msg.user .meta{justify-content:flex-end}
+.msg .meta button{background:none;border:none;color:var(--text3);cursor:pointer;font-size:10px;padding:1px 4px;border-radius:3px;transition:all .15s}
+.msg .meta button:hover{color:var(--text);background:rgba(255,255,255,.06)}
+
+/* Thinking animation */
+.thinking{display:flex;align-items:center;gap:6px;color:var(--text3);font-size:12px;padding:4px 0}
+.thinking .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:bounce 1.4s infinite}
+.thinking .dot:nth-child(2){animation-delay:.2s}
+.thinking .dot:nth-child(3){animation-delay:.4s}
+@keyframes bounce{0%,80%,100%{transform:scale(.6);opacity:.4}40%{transform:scale(1);opacity:1}}
+
+/* Think block */
+.think-block{margin:6px 0;border-left:2px solid var(--accent);padding-left:10px}
+.think-block summary{cursor:pointer;color:var(--text3);font-size:11px;user-select:none;padding:2px 0}
+.think-block summary:hover{color:var(--accent2)}
+.think-content{font-size:12px;color:var(--text3);line-height:1.5;margin-top:4px}
+
+/* Code blocks */
+.bubble code{background:rgba(255,255,255,.08);padding:1px 5px;border-radius:4px;font-size:12px;font-family:'JetBrains Mono','Fira Code',monospace}
+.bubble pre{background:#0d0d14;border:1px solid var(--border);border-radius:8px;padding:12px;margin:8px 0;overflow-x:auto;position:relative}
+.bubble pre code{background:none;padding:0;font-size:12px;line-height:1.5;display:block}
+.bubble strong{font-weight:600;color:#f1f5f9}
+.bubble em{font-style:italic;color:var(--text2)}
+.bubble a{color:var(--accent2);text-decoration:none}
+.bubble a:hover{text-decoration:underline}
+.bubble img.chat-img{max-width:260px;max-height:260px;border-radius:8px;margin:4px 0;display:block;cursor:pointer;transition:opacity .15s}
+.bubble img.chat-img:hover{opacity:.85}
+
+/* Input */
+.input-area{padding:12px 20px 16px;border-top:1px solid var(--border);background:var(--chat)}
+.preview-bar{padding:0 0 8px;display:flex;gap:8px;flex-wrap:wrap}
+.preview-item{position:relative;width:64px;height:64px;border-radius:8px;overflow:hidden;border:1px solid var(--border)}
+.preview-item img{width:100%;height:100%;object-fit:cover}
+.preview-remove{position:absolute;top:2px;right:2px;width:18px;height:18px;background:rgba(0,0,0,.7);border:none;border-radius:50%;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:background .15s}
+.preview-remove:hover{background:var(--red)}
+.input-row{display:flex;gap:10px;align-items:flex-end}
+.attach-btn{width:40px;height:40px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text3);cursor:pointer;transition:all .15s;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.attach-btn:hover{border-color:var(--accent);color:var(--accent2);background:rgba(99,102,241,.06)}
+.input-row textarea{flex:1;padding:10px 14px;background:var(--input);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px;resize:none;outline:none;font-family:inherit;min-height:40px;max-height:120px;line-height:1.5;transition:border .2s}
+.input-row textarea:focus{border-color:var(--accent)}
+.input-row textarea::placeholder{color:var(--text3)}
+.send-btn{width:40px;height:40px;background:var(--accent);border:none;border-radius:10px;color:#fff;font-size:16px;cursor:pointer;transition:all .15s;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.send-btn:hover{background:var(--accent2);transform:scale(1.05)}
+.send-btn:disabled{opacity:.3;cursor:not-allowed;transform:none}
+.send-btn.stop{background:var(--red)}
+.send-btn.stop:hover{background:#dc2626}
+.status{text-align:center;font-size:10px;color:var(--text3);padding:4px 0 0;min-height:16px}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}::-webkit-scrollbar-thumb:hover{background:#333}
+
+/* Mobile toggle */
+.menu-btn{display:none;background:none;border:none;color:var(--text);font-size:18px;cursor:pointer;padding:4px}
+
+@media(max-width:768px){
+  .sidebar{position:fixed;left:0;top:0;bottom:0;z-index:100;transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99}
+  .sidebar-overlay.show{display:block}
+  .menu-btn{display:block}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="sidebar-overlay" id="overlay" onclick="toggleSidebar()"></div>
+
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> AI Chat</h2>
+    </div>
+    <div class="config">
+      <label>Account ID</label>
+      <input type="text" id="accountId" placeholder="输入你的 Account ID">
+      <label>API Token</label>
+      <input type="password" id="apiToken" placeholder="输入你的 API Token">
+      <label>Model</label>
+      <div class="model-picker" id="modelPicker">
+        <button class="model-trigger" id="modelTrigger" type="button" onclick="togglePicker()">
+          <svg class="model-trigger-icon" id="triggerIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          <span class="model-trigger-text" id="triggerText">Llama 3.1 8B</span>
+          <svg class="model-trigger-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="model-dropdown" id="modelDropdown">
+          <div class="model-search-wrap">
+            <svg class="model-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" class="model-search" id="modelSearch" placeholder="搜索模型…" oninput="filterModels(this.value)">
+          </div>
+          <div class="model-list" id="modelList"></div>
+        </div>
+      </div>
+      <label>System Prompt</label>
+      <input type="text" id="systemPrompt" value="你是一个有用的AI助手，用中文回答。">
+    </div>
+    <div class="quota-bar" id="quotaBar">
+      <div class="quota-header">
+        <span class="quota-label"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>今日免费额度</span>
+        <span class="quota-num" id="quotaNum">--</span>
+      </div>
+      <div class="quota-track"><div class="quota-fill" id="quotaFill" style="width:0"></div></div>
+      <div class="quota-footer"><span id="quotaUsed">查询中…</span><button class="quota-refresh" onclick="fetchQuota()" title="刷新"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button></div>
+    </div>
+    <div class="actions">
+      <button class="btn-primary" onclick="newChat()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>新对话</button>
+      <button class="btn-ghost" onclick="exportChat()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导出</button>
+    </div>
+    <div class="history" id="history"></div>
+    <div class="sidebar-footer">Powered by Cloudflare Workers AI</div>
+  </div>
+
+  <div class="chat">
+    <div class="chat-header">
+      <div class="chat-header-left">
+        <button class="menu-btn" onclick="toggleSidebar()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+        <span class="title" id="chatTitle">新对话</span>
+        <span class="model-tag" id="modelTag">Llama 3.1 8B</span>
+      </div>
+      <div class="chat-header-right">
+        <button onclick="clearChat()" title="清空对话"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+        <button onclick="exportChat()" title="导出"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+      </div>
+    </div>
+    <div class="messages" id="msgs">
+      <div class="msg ai">
+        <div class="avatar">AI</div>
+        <div class="content">
+          <div class="bubble">你好！我是 AI 聊天机器人。<br><br>请在左侧配置 <strong>Account ID</strong> 和 <strong>API Token</strong>，然后选择模型开始对话。<br><br>支持 50+ 个开源大模型，随时切换。</div>
+          <div class="meta"><span>Cloudflare Workers AI</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="input-area">
+      <div class="preview-bar" id="previewBar" style="display:none">
+        <div class="preview-item" id="previewItem">
+          <img id="previewImg" src="" alt="">
+          <button class="preview-remove" onclick="removeImage()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
+      </div>
+      <div class="input-row">
+        <input type="file" id="imgInput" accept="image/*" style="display:none" onchange="onImagePick(this)">
+        <button class="attach-btn" onclick="document.getElementById('imgInput').click()" title="上传图片"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></button>
+        <textarea id="input" placeholder="输入消息... (Enter 发送, Shift+Enter 换行)" rows="1" onkeydown="onKey(event)" oninput="autoResize(this)"></textarea>
+        <button class="send-btn" id="sendBtn" onclick="send()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+      </div>
+      <div class="status" id="status"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const WORKER = 'https://ai.1308715689.workers.dev';
+let chats = [], cur = -1, busy = false, abortCtrl = null;
+
+// Model catalog
+const MODELS = [
+  { cat: 'Meta Llama', color: '#6366f1', items: [
+    { v:'@cf/meta/llama-4-scout-17b-16e-instruct', n:'Llama 4 Scout 17B', badge:'New' },
+    { v:'@cf/meta/llama-3.3-70b-instruct-fp8-fast', n:'Llama 3.3 70B' },
+    { v:'@cf/meta/llama-3.1-8b-instruct', n:'Llama 3.1 8B', badge:'★' },
+    { v:'@cf/meta/llama-3.2-3b-instruct', n:'Llama 3.2 3B' },
+    { v:'@cf/meta/llama-3.2-1b-instruct', n:'Llama 3.2 1B' },
+    { v:'@cf/meta/llama-3.2-11b-vision-instruct', n:'Llama 3.2 Vision', badge:'V' },
+    { v:'@cf/meta/llama-3-8b-instruct', n:'Llama 3 8B' },
+  ]},
+  { cat: 'DeepSeek', color: '#22c55e', items: [
+    { v:'@cf/deepseek-ai/deepseek-r1-distill-qwen-32b', n:'DeepSeek R1 32B', badge:'R1' },
+  ]},
+  { cat: 'Qwen', color: '#f59e0b', items: [
+    { v:'@cf/qwen/qwq-32b', n:'QwQ 32B' },
+    { v:'@cf/qwen/qwen3-30b-a3b-fp8', n:'Qwen3 30B' },
+    { v:'@cf/qwen/qwen2.5-coder-32b-instruct', n:'Qwen2.5 Coder 32B' },
+    { v:'@cf/qwen/qwen1.5-14b-chat-awq', n:'Qwen1.5 14B' },
+    { v:'@cf/qwen/qwen1.5-7b-chat-awq', n:'Qwen1.5 7B' },
+    { v:'@cf/qwen/qwen1.5-0.5b-chat', n:'Qwen1.5 0.5B' },
+  ]},
+  { cat: 'Kimi', color: '#ec4899', items: [
+    { v:'@cf/moonshotai/kimi-k2.5', n:'Kimi K2.5 (256K)' },
+  ]},
+  { cat: 'GLM', color: '#8b5cf6', items: [
+    { v:'@cf/zai-org/glm-4.7-flash', n:'GLM-4.7 Flash' },
+  ]},
+  { cat: 'Mistral', color: '#f97316', items: [
+    { v:'@cf/mistralai/mistral-small-3.1-24b-instruct', n:'Mistral Small 3.1 24B' },
+    { v:'@cf/mistral/mistral-7b-instruct-v0.2-lora', n:'Mistral 7B v0.2' },
+  ]},
+  { cat: 'OpenAI', color: '#10b981', items: [
+    { v:'@cf/openai/gpt-oss-120b', n:'GPT OSS 120B', badge:'New' },
+    { v:'@cf/openai/gpt-oss-20b', n:'GPT OSS 20B', badge:'New' },
+  ]},
+  { cat: 'Google', color: '#3b82f6', items: [
+    { v:'@cf/google/gemma-4-26b-a4b-it', n:'Gemma 4 26B' },
+    { v:'@cf/google/gemma-3-12b-it', n:'Gemma 3 12B' },
+  ]},
+  { cat: 'NVIDIA', color: '#a3e635', items: [
+    { v:'@cf/nvidia/nemotron-3-120b-a12b', n:'Nemotron 3 120B' },
+  ]},
+  { cat: '其他', color: '#94a3b8', items: [
+    { v:'@hf/nexusflow/starling-lm-7b-beta', n:'Starling LM 7B' },
+    { v:'@hf/nousresearch/hermes-2-pro-mistral-7b', n:'Hermes 2 Pro 7B' },
+    { v:'@cf/openchat/openchat-3.5-0106', n:'OpenChat 3.5' },
+    { v:'@cf/microsoft/phi-2', n:'Phi-2' },
+    { v:'@cf/tinyllama/tinyllama-1.1b-chat-v1.0', n:'TinyLlama 1.1B' },
+  ]},
+  { cat: '专用', color: '#64748b', items: [
+    { v:'@cf/qwen/qwen2.5-coder-32b-instruct', n:'Qwen2.5 Coder' },
+    { v:'@cf/deepseek-ai/deepseek-math-7b-instruct', n:'DeepSeek Math' },
+    { v:'@cf/defog/sqlcoder-7b-2', n:'SQLCoder' },
+  ]},
+];
+
+let selectedModel = '@cf/meta/llama-3.1-8b-instruct';
+let pendingImage = null; // { base64, mime }
+
+// Image handling
+function isVisionModel(m) {
+  return /vision|multimodal|image/i.test(m || selectedModel);
+}
+
+function onImagePick(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { setStatus('仅支持图片文件'); return; }
+  if (file.size > 5 * 1024 * 1024) { setStatus('图片不能超过 5MB'); return; }
+
+  // Compress to max 512px longest side, quality 0.7
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let w = img.width, h = img.height;
+      const max = 512;
+      if (w > max || h > max) {
+        if (w > h) { h = Math.round(h * max / w); w = max; }
+        else { w = Math.round(w * max / h); h = max; }
+      }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+      pendingImage = { base64: dataUrl, mime: 'image/jpeg' };
+      document.getElementById('previewImg').src = dataUrl;
+      document.getElementById('previewBar').style.display = 'flex';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+
+function removeImage() {
+  pendingImage = null;
+  document.getElementById('previewBar').style.display = 'none';
+  document.getElementById('previewImg').src = '';
+}
+
+function catDot(cat) {
+  const c = MODELS.find(m => m.cat === cat);
+  const color = c ? c.color : '#94a3b8';
+  return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0"></span>`;
+}
+
+function renderModelList(filter) {
+  const list = document.getElementById('modelList');
+  const q = (filter || '').toLowerCase();
+  let html = '';
+  MODELS.forEach(cat => {
+    const visible = cat.items.filter(m => !q || m.n.toLowerCase().includes(q) || m.v.toLowerCase().includes(q) || cat.cat.toLowerCase().includes(q));
+    if (visible.length === 0) return;
+    html += `<div class="model-cat">${catDot(cat.cat)} ${esc(cat.cat)}</div>`;
+    cat.items.forEach(m => {
+      const hidden = q && !(m.n.toLowerCase().includes(q) || m.v.toLowerCase().includes(q) || cat.cat.toLowerCase().includes(q));
+      const active = m.v === selectedModel;
+      html += `<div class="model-opt${active?' active':''}${hidden?' hidden':''}" onclick="selectModel('${esc(m.v)}','${esc(m.n)}','${esc(cat.color)}')" title="${esc(m.v)}">
+        <span class="model-opt-icon">${catDot(cat.cat)}</span>
+        <span class="model-opt-name">${esc(m.n)}</span>
+        ${m.badge ? `<span class="model-opt-badge">${esc(m.badge)}</span>` : ''}
+      </div>`;
+    });
+  });
+  list.innerHTML = html || '<div style="padding:16px;text-align:center;color:var(--text3);font-size:11px">没有找到匹配的模型</div>';
+}
+
+function selectModel(val, name, color) {
+  selectedModel = val;
+  document.getElementById('triggerText').textContent = name;
+  // Set trigger icon to a colored dot
+  const triggerIcon = document.getElementById('triggerIcon');
+  triggerIcon.innerHTML = `<circle cx="8" cy="8" r="4" fill="${color}"/>`;
+  document.getElementById('modelTag').textContent = name;
+  localStorage.setItem('cf_model', val);
+  localStorage.setItem('cf_modelName', name);
+  localStorage.setItem('cf_modelColor', color);
+  renderModelList(document.getElementById('modelSearch').value);
+  closePicker();
+}
+
+function togglePicker() {
+  const dd = document.getElementById('modelDropdown');
+  const btn = document.getElementById('modelTrigger');
+  if (dd.classList.contains('show')) { closePicker(); }
+  else {
+    dd.classList.add('show');
+    btn.classList.add('open');
+    renderModelList('');
+    document.getElementById('modelSearch').value = '';
+    setTimeout(() => document.getElementById('modelSearch').focus(), 50);
+  }
+}
+
+function closePicker() {
+  document.getElementById('modelDropdown').classList.remove('show');
+  document.getElementById('modelTrigger').classList.remove('open');
+}
+
+function filterModels(q) { renderModelList(q); }
+
+// Quota
+const FREE_LIMIT = 10000;
+
+async function fetchQuota() {
+  const accountId = document.getElementById('accountId').value.trim();
+  const apiToken = document.getElementById('apiToken').value.trim();
+  const numEl = document.getElementById('quotaNum');
+  const fillEl = document.getElementById('quotaFill');
+  const usedEl = document.getElementById('quotaUsed');
+
+  if (!accountId || !apiToken) {
+    numEl.textContent = '--';
+    usedEl.textContent = '请先填写凭证';
+    return;
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const query = `query {
+    viewer {
+      accounts(filter: { accountTag: "${accountId}" }) {
+        workersInvocationsAdaptive(
+          filter: { date: "${today}", scriptName_neq: "" }
+          limit: 10000
+        ) {
+          sum {
+            requests
+          }
+        }
+      }
+    }
+  }`;
+
+  try {
+    const res = await fetch('https://api.cloudflare.com/client/v4/graphql', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiToken}`,
+      },
+      body: JSON.stringify({ query }),
+    });
+    const data = await res.json();
+
+    if (data.errors) {
+      throw new Error(data.errors[0]?.message || '查询失败');
+    }
+
+    // Try workers analytics first
+    let used = 0;
+    const wr = data.data?.viewer?.accounts?.[0]?.workersInvocationsAdaptive;
+    if (wr) {
+      used = wr.reduce((s, r) => s + (r.sum?.requests || 0), 0);
+    }
+
+    // Fallback: try AI-specific analytics
+    if (used === 0) {
+      const aiQuery = `query {
+        viewer {
+          accounts(filter: { accountTag: "${accountId}" }) {
+            workersAICostAdaptiveGroups(
+              filter: { date: "${today}" }
+              limit: 10000
+            ) {
+              sum {
+                requests
+                neurons
+              }
+            }
+          }
+        }
+      }`;
+      const aiRes = await fetch('https://api.cloudflare.com/client/v4/graphql', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiToken}`,
+        },
+        body: JSON.stringify({ query: aiQuery }),
+      });
+      const aiData = await aiRes.json();
+      const aiGroups = aiData.data?.viewer?.accounts?.[0]?.workersAICostAdaptiveGroups;
+      if (aiGroups) {
+        used = aiGroups.reduce((s, r) => s + (r.sum?.neurons || 0), 0);
+      }
+    }
+
+    const remaining = Math.max(0, FREE_LIMIT - used);
+    const pct = Math.min(100, (remaining / FREE_LIMIT) * 100);
+    const usedPct = 100 - pct;
+
+    // Determine color
+    let cls = '';
+    if (pct < 20) cls = 'danger';
+    else if (pct < 50) cls = 'warn';
+
+    numEl.textContent = `${remaining.toLocaleString()} 剩余`;
+    numEl.className = 'quota-num' + (cls ? ' ' + cls : '');
+    fillEl.style.width = pct + '%';
+    fillEl.className = 'quota-fill' + (cls ? ' ' + cls : '');
+    usedEl.textContent = `已用 ${used.toLocaleString()} / ${FREE_LIMIT.toLocaleString()}`;
+  } catch (e) {
+    numEl.textContent = '--';
+    numEl.className = 'quota-num';
+    fillEl.style.width = '0';
+    usedEl.textContent = e.message || '查询失败';
+  }
+}
+
+// Init
+function init() {
+  // Load saved credentials
+  const savedId = localStorage.getItem('cf_accountId');
+  const savedToken = localStorage.getItem('cf_apiToken');
+  if (savedId) document.getElementById('accountId').value = savedId;
+  if (savedToken) document.getElementById('apiToken').value = savedToken;
+
+  // Load saved model
+  const savedModel = localStorage.getItem('cf_model');
+  const savedName = localStorage.getItem('cf_modelName');
+  const savedColor = localStorage.getItem('cf_modelColor');
+  if (savedModel) selectedModel = savedModel;
+  if (savedName) document.getElementById('triggerText').textContent = savedName;
+  if (savedColor) {
+    const triggerIcon = document.getElementById('triggerIcon');
+    triggerIcon.innerHTML = `<circle cx="8" cy="8" r="4" fill="${savedColor}"/>`;
+  }
+  document.getElementById('modelTag').textContent = savedName || 'Llama 3.1 8B';
+
+  // Auto-save on input
+  document.getElementById('accountId').addEventListener('input', e => {
+    localStorage.setItem('cf_accountId', e.target.value.trim());
+  });
+  document.getElementById('apiToken').addEventListener('input', e => {
+    localStorage.setItem('cf_apiToken', e.target.value.trim());
+  });
+
+  // Click outside to close picker
+  document.addEventListener('click', e => {
+    const picker = document.getElementById('modelPicker');
+    if (!picker.contains(e.target)) closePicker();
+  });
+
+  renderModelList('');
+  newChat();
+  fetchQuota();
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('overlay').classList.toggle('show');
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+// Chat management
+function newChat() {
+  chats.push({ title: '新对话', msgs: [], created: Date.now() });
+  cur = chats.length - 1;
+  renderHistory();
+  renderMsgs();
+  document.getElementById('chatTitle').textContent = '新对话';
+}
+
+function switchChat(i) {
+  cur = i;
+  renderHistory();
+  renderMsgs();
+  document.getElementById('chatTitle').textContent = chats[i].title;
+  if (window.innerWidth <= 768) toggleSidebar();
+}
+
+function deleteChat(i, e) {
+  e.stopPropagation();
+  chats.splice(i, 1);
+  if (chats.length === 0) { newChat(); return; }
+  if (cur >= chats.length) cur = chats.length - 1;
+  if (cur === i) cur = Math.min(i, chats.length - 1);
+  renderHistory();
+  renderMsgs();
+}
+
+function clearChat() {
+  if (!chats[cur]) return;
+  chats[cur].msgs = [];
+  renderMsgs();
+  setStatus('对话已清空');
+}
+
+function renderHistory() {
+  document.getElementById('history').innerHTML = chats.map((c, i) =>
+    `<div class="history-item ${i === cur ? 'active' : ''}" onclick="switchChat(${i})">${esc(c.title)}<button class="del" onclick="deleteChat(${i},event)">×</button></div>`
+  ).join('');
+}
+
+// Rendering
+function esc(s) { return s ? s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : ''; }
+
+function renderMd(text) {
+  if (!text) return '';
+  // Strip <think> blocks
+  let s = text;
+  let si = s.indexOf('<think>');
+  if (si !== -1) { let ei = s.indexOf('</think>', si); if (ei !== -1) s = s.substring(0, si) + s.substring(ei + 8); }
+  s = s.trim();
+  s = esc(s);
+  // Markdown
+  s = s.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => `<pre><code>${code.trim()}</code></pre>`);
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
+  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  s = s.replace(/^### (.+)$/gm, '<strong style="font-size:14px">$1</strong>');
+  s = s.replace(/^## (.+)$/gm, '<strong style="font-size:15px">$1</strong>');
+  s = s.replace(/^# (.+)$/gm, '<strong style="font-size:16px">$1</strong>');
+  s = s.replace(/^- (.+)$/gm, '• $1');
+  s = s.replace(/^\d+\. (.+)$/gm, m => m);
+  s = s.split('\n').filter(l => l.trim().length > 0).join('<br>');
+  return s;
+}
+
+function renderMsgs() {
+  const box = document.getElementById('msgs');
+  if (cur < 0) { box.innerHTML = ''; return; }
+  const m = chats[cur].msgs;
+  box.innerHTML = m.map((msg, i) => {
+    const isUser = msg.role === 'user';
+    const time = msg.time ? new Date(msg.time).toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'}) : '';
+    const imgHtml = msg.image ? `<img class="chat-img" src="${esc(msg.image)}" onclick="window.open(this.src)">` : '';
+    const content = isUser ? esc(msg.content).replace(/\n/g,'<br>') : renderMd(msg.content);
+    const copyBtn = !isUser ? `<button onclick="copyMsg(${i})">复制</button>` : '';
+    return `<div class="msg ${msg.role}">
+      <div class="avatar">${isUser ? 'U' : 'AI'}</div>
+      <div class="content">
+        <div class="bubble" id="bubble-${i}">${imgHtml}${content}</div>
+        <div class="meta">${time ? `<span>${time}</span>` : ''}${copyBtn}</div>
+      </div>
+    </div>`;
+  }).join('');
+  box.scrollTop = box.scrollHeight;
+}
+
+function updateBubble(i, content) {
+  const el = document.getElementById('bubble-' + i);
+  if (el) {
+    el.innerHTML = renderMd(content);
+    el.closest('.messages').scrollTop = el.closest('.messages').scrollHeight;
+  }
+}
+
+function copyMsg(i) {
+  const text = chats[cur].msgs[i].content;
+  navigator.clipboard.writeText(text).then(() => setStatus('已复制'));
+}
+
+function setStatus(s) { document.getElementById('status').textContent = s; }
+
+// Send
+function onKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }
+
+async function send() {
+  const input = document.getElementById('input');
+  const text = input.value.trim();
+  const img = pendingImage;
+  if ((!text && !img) || busy) return;
+
+  const accountId = document.getElementById('accountId').value.trim();
+  const apiToken = document.getElementById('apiToken').value.trim();
+  const model = selectedModel;
+  const sysPrompt = document.getElementById('systemPrompt').value.trim();
+
+  if (!accountId || !apiToken) { alert('请先填写 Account ID 和 API Token'); return; }
+  if (cur < 0) newChat();
+
+  const conv = chats[cur];
+  conv.msgs.push({ role: 'user', content: text || '[图片]', image: img ? img.base64 : null, time: Date.now() });
+
+  if (conv.msgs.length === 1) {
+    conv.title = (text || '图片消息').slice(0, 24) + ((text || '图片消息').length > 24 ? '...' : '');
+    document.getElementById('chatTitle').textContent = conv.title;
+    renderHistory();
+  }
+
+  input.value = '';
+  input.style.height = 'auto';
+  removeImage();
+  renderMsgs();
+
+  // Build messages for API
+  const apiMsgs = [];
+  const hasImage = conv.msgs.some(m => m.image);
+  if (sysPrompt) apiMsgs.push({ role: 'system', content: sysPrompt });
+  conv.msgs.forEach(m => {
+    if (m.image) {
+      // Vision format: content as array (Cloudflare needs full data URI)
+      const parts = [];
+      if (m.content && m.content !== '[图片]') parts.push({ type: 'text', text: m.content });
+      parts.push({ type: 'image_url', image_url: { url: m.image } });
+      apiMsgs.push({ role: m.role, content: parts });
+    } else {
+      apiMsgs.push({ role: m.role, content: m.content });
+    }
+  });
+
+  busy = true;
+  const btn = document.getElementById('sendBtn');
+  btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
+  btn.classList.add('stop');
+  btn.onclick = stop;
+  setStatus('思考中...');
+
+  // Add AI placeholder
+  conv.msgs.push({ role: 'assistant', content: '', time: Date.now() });
+  renderMsgs();
+  const msgIdx = conv.msgs.length - 1;
+
+  abortCtrl = new AbortController();
+
+  try {
+    const useStream = !hasImage; // Vision models may not support streaming
+    const reqBody = JSON.stringify({ accountId, apiToken, model, messages: apiMsgs, stream: useStream });
+    console.log('Request payload size:', reqBody.length, 'bytes, stream:', useStream);
+    console.log('Messages structure:', JSON.stringify(apiMsgs.map(m => ({ role: m.role, content: Array.isArray(m.content) ? m.content.map(c => c.type) : typeof m.content }))));
+    const res = await fetch(WORKER, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: reqBody,
+      signal: abortCtrl.signal,
+    });
+
+    if (!res.ok) {
+      const rawText = await res.text().catch(() => '');
+      let err = '请求失败';
+      try {
+        const data = JSON.parse(rawText);
+        err = (data.errors || []).map(e => e.message || e).join('; ') || data.error || err;
+      } catch(e) {
+        if (rawText) err = rawText.slice(0, 500);
+      }
+      conv.msgs[msgIdx].content = `❌ ${err}\n\n<small>状态码: ${res.statusCode || res.status}</small>`;
+      console.error('API error:', res.status, rawText);
+      renderMsgs();
+      setStatus('请求失败');
+      resetBtn();
+      return;
+    }
+
+    function extract(o) {
+      if (typeof o.response === 'string') return o.response;
+      if (o.choices?.[0]?.delta?.content) return o.choices[0].delta.content;
+      if (o.choices?.[0]?.message?.content) return o.choices[0].message.content;
+      if (o.result?.response) return o.result.response;
+      if (o.result?.choices?.[0]?.message?.content) return o.result.choices[0].message.content;
+      return null;
+    }
+
+    let full = '';
+
+    if (useStream) {
+      // Stream read
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '', tokens = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+
+        const lines = buf.split('\n');
+        buf = lines.pop();
+
+        let got = false;
+        for (const raw of lines) {
+          const line = raw.trim();
+          if (!line || line.startsWith(':')) continue;
+          let js = line.startsWith('data: ') ? line.slice(6) : line;
+          if (js === '[DONE]') continue;
+          try {
+            const p = JSON.parse(js);
+            const t = extract(p);
+            if (t) { full += t; tokens++; got = true; }
+          } catch (e) {
+            if (line.length > 0 && line.length < 200) { full += line; tokens++; got = true; }
+          }
+        }
+        if (got && full) {
+          conv.msgs[msgIdx].content = full;
+          updateBubble(msgIdx, full);
+          setStatus(`生成中 · ${tokens} tokens`);
+        }
+      }
+
+      // Buffer remainder
+      if (buf.trim()) {
+        try {
+          let js = buf.trim().startsWith('data: ') ? buf.trim().slice(6) : buf.trim();
+          if (js !== '[DONE]') {
+            const p = JSON.parse(js);
+            const t = extract(p);
+            if (t) full += t;
+          }
+        } catch (e) {}
+      }
+
+      // Fallback for streaming with no content
+      if (!full) {
+        setStatus('流式无内容，降级...');
+        try {
+          const r2 = await fetch(WORKER, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accountId, apiToken, model, messages: apiMsgs, stream: false }),
+          });
+          const d2 = await r2.json();
+          full = extract(d2) || extract(d2.result) || JSON.stringify(d2).slice(0, 500);
+        } catch (e) { full = '❌ ' + e.message; }
+      }
+    } else {
+      // Non-streaming (vision models)
+      setStatus('处理图片中...');
+      const data = await res.json();
+      full = extract(data) || extract(data.result) || JSON.stringify(data).slice(0, 500);
+    }
+
+    conv.msgs[msgIdx].content = full;
+    renderMsgs();
+    setStatus(`完成 · ${full.length} 字`);
+
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      conv.msgs[msgIdx].content += '\n\n*[已停止]*';
+      renderMsgs();
+      setStatus('已停止');
+    } else {
+      conv.msgs[msgIdx].content = `❌ ${e.message}`;
+      renderMsgs();
+      setStatus('请求失败');
+    }
+  }
+
+  resetBtn();
+  fetchQuota();
+}
+
+function stop() {
+  if (abortCtrl) abortCtrl.abort();
+}
+
+function resetBtn() {
+  busy = false;
+  abortCtrl = null;
+  const btn = document.getElementById('sendBtn');
+  btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>';
+  btn.classList.remove('stop');
+  btn.onclick = send;
+}
+
+// Export
+function exportChat() {
+  if (cur < 0) return;
+  const conv = chats[cur];
+  let md = `# ${conv.title}\n\n`;
+  conv.msgs.forEach(m => {
+    md += `**${m.role === 'user' ? '用户' : 'AI'}** (${new Date(m.time).toLocaleString('zh-CN')})\n\n${m.content}\n\n---\n\n`;
+  });
+  const blob = new Blob([md], { type: 'text/markdown' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${conv.title}.md`;
+  a.click();
+  setStatus('已导出');
+}
+
+init();
+</script>
+</body>
+</html>
